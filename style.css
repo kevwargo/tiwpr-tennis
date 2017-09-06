@@ -1,0 +1,17 @@
+#main-container {
+    width: 100%;
+}
+
+#shadow {
+    position: fixed;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 50, 0.5);
+    padding: 20%;
+}
+
+#waiting {
+    background: white;
+    color: red;
+    font-size: 48px;
+}
