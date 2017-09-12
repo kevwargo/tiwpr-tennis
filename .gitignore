@@ -104,3 +104,5 @@ ENV/
 *~
 \#*
 .#*
+
+.dir-locals.el

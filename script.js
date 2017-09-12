@@ -14,16 +14,71 @@ var WsMessageHandler = {
     },
 
     onSession: function(session) {
-        sessionStorage.session = session;
-        document.title = session;
-        htmlLog('WS: Session saved: ' + session);
+        initSession(session);
     },
 
     onGame: function(game) {
-        htmlLog('WS: Game: ' + game);
+        htmlLog('WS: Game: ' + game.id);
+        $('#shadow').hide();
+        Playground.init(game.side);
+        Playground.start();
     },
 
 };
+
+var Playground = {
+    playerWidth: 30,
+    playerHeight: 150,
+
+    init: function(side) {
+        this.canvas = document.getElementById('playground');
+        this.canvas.width = 640;
+        this.canvas.height = 480;
+        this.context = this.canvas.getContext('2d');
+        this.left = new Player('left');
+        this.right = new Player('right');
+        initEvents(side);
+    },
+
+    start: function() {
+        if (this.interval) {
+            clearInterval(this.interval);
+        }
+        this.interval = setInterval(this.draw, 40);
+    },
+
+    clear: function() {
+        this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    },
+
+    draw: function() {
+        var ctx = Playground.context,
+            left = Playground.left,
+            right = Playground.right;
+        Playground.clear();
+        ctx.fillStyle = 'blue';
+        ctx.fillRect(left.x, left.y, Playground.playerWidth, Playground.playerHeight);
+        ctx.fillStyle = 'red';
+        ctx.fillRect(right.x, right.y, Playground.playerWidth, Playground.playerHeight);
+    },
+
+    stop: function() {
+        if (this.interval) {
+            clearInterval(this.interval);
+            this.interval = undefined;
+        }
+    }
+};
+
+function Player(side) {
+    this.side = side;
+    if (side === 'left') {
+        this.x = 0;
+    } else if (side === 'right') {
+        this.x = Playground.canvas.width - 30;
+    }
+    this.y = 165;
+}
 
 
 function htmlLog(message) {
@@ -31,7 +86,7 @@ function htmlLog(message) {
     window.scrollTo(0, document.body.scrollHeight);
 }
 
-function initSession() {
+function findSession() {
     var session = null;
     matches = location.search.match(/[?&]session=([A-Z0-9]+)(&|$)/);
     if (matches && matches[1]) {
@@ -44,10 +99,13 @@ function initSession() {
             console.log('Session id `' + session + '` extracted from sessionStorage');
         }
     }
-    if (session) {
-        document.title = session;
-    }
     return session;
+}
+
+function initSession(session) {
+    document.title = session;
+    sessionStorage.session = session;
+    htmlLog('WS: Session saved: ' + session);
 }
 
 function initWS(session) {
@@ -72,7 +130,26 @@ function initWS(session) {
     };
 }
 
+function initEvents(side) {
+    $(document).keydown(function(event) {
+        switch (event.key) {
+        case 'ArrowUp':
+            event.preventDefault();
+            Playground[side].y -= 3;
+            break;
+        case 'ArrowDown':
+            event.preventDefault();
+            Playground[side].y += 3;
+            break;
+        }
+    });
+}
+
 
 $(function() {
-    initWS(initSession());
+    var session = findSession();
+    if (session) {
+        initSession(session);
+    }
+    initWS(session);
 });

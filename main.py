@@ -19,12 +19,12 @@ class SessionHandler(web.RequestHandler):
 class Game:
 
     def __init__(self, left, right):
+        left.side = 'left'
+        right.side = 'right'
         self.left = left
         self.right = right
         left.game = self
         right.game = self
-        left.opponent = right
-        right.opponent = left
 
     def __str__(self):
         return 'Game {}:{}'.format(self.left, self.right)
@@ -32,13 +32,13 @@ class Game:
     def update_player(self, player):
         if str(player) == str(self.left):
             self.left = player
-            self.right.opponent = player
             player.game = self
+            player.side = 'left'
             print('replaced left')
         elif str(player) == str(self.right):
             self.right = player
-            self.left.opponent = player
             player.game = self
+            player.side = 'right'
             print('replaced right')
         else:
             print('replaced nothing')
@@ -61,40 +61,32 @@ class Player(websocket.WebSocketHandler):
         self.manager.players[self.session] = self
         self.write_json('session', self.session)
 
+    def init_game(self):
+        self.write_json('game', {'id': str(self.game), 'side': self.side})
+
     def __str__(self):
         if hasattr(self, 'session'):
             return self.session
         else:
             return websocket.WebSocketHandler.__str__(self)
 
+    def __getattribute__(self, attr):
+        if attr != 'game' and hasattr(self, 'game'):
+            if attr == 'other_side':
+                l = ['left', 'right']
+                return l[not l.index(self.side)]
+            if attr == 'opponent':
+                return getattr(self.game, self.other_side)
+        return object.__getattribute__(self, attr)
+
     def open(self, session=None, **kwargs):
         print('New ws connection: ' + str(session))
         if session:
-            session = session.upper()
-            if session in self.manager.players:
-                if self.manager.players[session].ws_connection is None:
-                    print('replacing player in session ' + session)
-                    self.session = session
-                    self.manager.players[session].game.update_player(self)
-                    self.manager.players[session] = self
-                    self.write_json('game', str(self.game))
-                else:
-                    print('session {} is taken'.format(session))
-                    self.throw_error('Session is taken')
-            else:
-                self.throw_error('No such session', 404)
+            self.manager.connect_to_session(session.upper(), self)
         elif self.manager.waitingPlayer:
-            game = Game(self.manager.waitingPlayer, self)
-            self.manager.games.add(game)
-            self.manager.waitingPlayer.init_session()
-            self.init_session()
-            self.manager.waitingPlayer.write_json('game', str(game))
-            self.write_json('game', str(game))
-            print('New {}'.format(game))
-            self.manager.waitingPlayer = None
+            self.manager.create_new_game(self)
         else:
-            print('New waiting player')
-            self.manager.waitingPlayer = self
+            self.manager.player_wait(self)
 
     def on_close(self):
         print('Player {} closed the connection'.format(self))
@@ -112,6 +104,34 @@ class Manager:
 
     def generate_session_id(self):
         return b64.b32encode(bytes(self.rangen.randint(0, 255) for _ in range(5))).decode('utf-8')
+
+    def connect_to_session(self, session, player):
+        if session in self.players:
+            if self.players[session].ws_connection is None:
+                print('replacing player in session ' + session)
+                player.session = session
+                self.players[session].game.update_player(player)
+                self.players[session] = player
+                player.init_game()
+            else:
+                print('session {} is taken'.format(session))
+                player.throw_error('Session is taken')
+        else:
+            player.throw_error('No such session', 404)
+
+    def create_new_game(self, player):
+        game = Game(self.waitingPlayer, player)
+        self.games.add(game)
+        self.waitingPlayer.init_session()
+        player.init_session()
+        self.waitingPlayer.init_game()
+        player.init_game()
+        print('New {}'.format(game))
+        self.waitingPlayer = None
+
+    def player_wait(self, player):
+        print('New waiting player')
+        self.waitingPlayer = player
 
 
 def main(port):
