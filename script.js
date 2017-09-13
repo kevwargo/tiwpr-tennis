@@ -1,5 +1,34 @@
-var WsMessageHandler = {
+var WS = {
 
+    init: function(session) {
+        this.ws = new WebSocket('ws://' + location.host + "/ws" + (session ? '/' + session : ''));
+        this.ws.binaryType = 'arraybuffer';
+        this.ws.onopen = function(event) {
+            htmlLog('WS opened');
+        };
+        this.ws.onmessage = function(event) {
+            if (typeof event.data === 'string') {
+                var msg = JSON.parse(event.data);
+                var type = msg.type;
+                if (type) {
+                    var method = 'on' + type.charAt(0).toUpperCase() + type.slice(1);
+                    if (typeof WS[method] === 'function') {
+                        WS[method](msg.data);
+                    }
+                }
+            } else {
+                WS.handleBinary(event.data);
+            }
+        };
+    },
+
+    send: function(type, data) {
+        this.ws.send(JSON.stringify({
+            type: type,
+            data: data
+        }));
+    },
+    
     onError: function(err) {
         htmlLog(renderjson.set_show_to_level('all')(err));
     },
@@ -23,6 +52,13 @@ var WsMessageHandler = {
         Playground.init(game.side);
         Playground.start();
     },
+
+    onPos: function(pos) {
+        if (('left' in pos) && ('right' in pos)) {
+            Playground.left.y = pos.left;
+            Playground.right.y = pos.right;
+        }
+    }
 
 };
 
@@ -77,7 +113,6 @@ function Player(side) {
     } else if (side === 'right') {
         this.x = Playground.canvas.width - 30;
     }
-    this.y = 165;
 }
 
 
@@ -108,40 +143,26 @@ function initSession(session) {
     htmlLog('WS: Session saved: ' + session);
 }
 
-function initWS(session) {
-    var ws = new WebSocket('ws://' + location.host + "/ws" + (session ? '/' + session : ''));
-    ws.binaryType = 'arraybuffer';
-    ws.onopen = function(event) {
-        htmlLog('ws opened');
-    };
-    ws.onmessage = function(event) {
-        if (typeof event.data === 'string') {
-            var msg = JSON.parse(event.data);
-            var type = msg.type;
-            if (type) {
-                var method = 'on' + type.charAt(0).toUpperCase() + type.slice(1);
-                if (typeof WsMessageHandler[method] === 'function') {
-                    WsMessageHandler[method](msg.data);
-                }
-            }
-        } else {
-            WsMessageHandler.handleBinary(event.data);
-        }
-    };
-}
-
 function initEvents(side) {
     $(document).keydown(function(event) {
         switch (event.key) {
         case 'ArrowUp':
-            event.preventDefault();
-            Playground[side].y -= 3;
+            if (Playground[side].y <= 0) {
+                return;
+            }
+            Playground[side].y -= 5;
             break;
         case 'ArrowDown':
-            event.preventDefault();
-            Playground[side].y += 3;
+            if (Playground[side].y >= 330) {
+                return;
+            }
+            Playground[side].y += 5;
             break;
+        default:
+            return;
         }
+        event.preventDefault();
+        WS.send('pos', Playground[side].y);
     });
 }
 
@@ -151,5 +172,5 @@ $(function() {
     if (session) {
         initSession(session);
     }
-    initWS(session);
+    WS.init(session);
 });
