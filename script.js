@@ -28,7 +28,7 @@ var WS = {
             data: data
         }));
     },
-    
+
     onError: function(err) {
         htmlLog(renderjson.set_show_to_level('all')(err));
     },
@@ -49,53 +49,73 @@ var WS = {
     onGame: function(game) {
         htmlLog('WS: Game: ' + game.id);
         $('#shadow').hide();
-        Playground.init(game.side);
+        Playground.init(game);
         Playground.start();
+        htmlLog('Angle: ' + game.ball.angle);
     },
 
     onPos: function(pos) {
-        if (('left' in pos) && ('right' in pos)) {
-            Playground.left.y = pos.left;
-            Playground.right.y = pos.right;
-        }
+        Playground.left.y = pos.left;
+        Playground.right.y = pos.right;
+    },
+
+    onBall: function(ball) {
+        Playground.ball = ball;
+        htmlLog(JSON.stringify(ball));
     }
 
 };
 
 var Playground = {
-    playerWidth: 30,
-    playerHeight: 150,
+    ballSize: 30,
 
-    init: function(side) {
+    init: function(game) {
         this.canvas = document.getElementById('playground');
         this.canvas.width = 640;
         this.canvas.height = 480;
         this.context = this.canvas.getContext('2d');
         this.left = new Player('left');
         this.right = new Player('right');
-        initEvents(side);
+        this.ball = game.ball;
+        initEvents(game.side);
     },
 
     start: function() {
+        var refreshInterval = 40;
+        var counter = 0;
+        var draw = function() {
+            var ctx = Playground.context,
+                left = Playground.left,
+                right = Playground.right,
+                ball = Playground.ball;
+
+            counter++;
+
+            Playground.clear();
+            left.draw(ctx);
+            right.draw(ctx);
+
+            ctx.beginPath();
+            ctx.arc(ball.pos.x, ball.pos.y, Playground.ballSize, 0, 2 * Math.PI);
+            ctx.fillStyle = 'green';
+            ctx.fill();
+
+            ball.pos.x += Math.cos(Math.PI * (ball.angle / 180)) * (ball.speed * refreshInterval / 1000);
+            ball.pos.y += Math.sin(Math.PI * (ball.angle / 180)) * (ball.speed * refreshInterval / 1000);
+
+        };
+        draw();
         if (this.interval) {
             clearInterval(this.interval);
         }
-        this.interval = setInterval(this.draw, 40);
+        this.interval = setInterval(draw, refreshInterval);
+        setInterval(function() {
+            WS.send('ball', Playground.ball);
+        }, 1000);
     },
 
     clear: function() {
         this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    },
-
-    draw: function() {
-        var ctx = Playground.context,
-            left = Playground.left,
-            right = Playground.right;
-        Playground.clear();
-        ctx.fillStyle = 'blue';
-        ctx.fillRect(left.x, left.y, Playground.playerWidth, Playground.playerHeight);
-        ctx.fillStyle = 'red';
-        ctx.fillRect(right.x, right.y, Playground.playerWidth, Playground.playerHeight);
     },
 
     stop: function() {
@@ -108,17 +128,46 @@ var Playground = {
 
 function Player(side) {
     this.side = side;
+    this.width = 30;
+    this.height = 150;
+    this.y = Playground.canvas.height / 2;
     if (side === 'left') {
-        this.x = 0;
-    } else if (side === 'right') {
-        this.x = Playground.canvas.width - 30;
+        this.color = 'blue';
+        this.xScale = 1;
+        this.xTranslate = 0;
+    } else {
+        this.color = 'red';
+        this.xScale = -1;
+        this.xTranslate = -Playground.canvas.width;
     }
+
+    this.move = function(step) {
+        this.y += step;
+    };
+
+    this.draw = function(ctx) {
+        var y = this.y - this.height / 2;
+
+        ctx.fillStyle = this.color;
+
+        ctx.scale(this.xScale, 1);
+        ctx.translate(this.xTranslate, 0);
+
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.arcTo(this.width, y, this.width, y + this.width, this.width);
+        ctx.lineTo(this.width, y + this.height - this.width);
+        ctx.arcTo(this.width, y + this.height, 0, y + this.height, this.width);
+        ctx.fill();
+
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+    };
 }
 
 
-function htmlLog(message) {
-    $('#log').append($('<pre>').html(message).css('margin', '3px').css('border', '1px dotted blue'));
-    window.scrollTo(0, document.body.scrollHeight);
+function htmlLog(message, id) {
+    $('#log').prepend($('<pre class="message">').html(message));
+    window.scrollTo(0, 0);
 }
 
 function findSession() {
@@ -147,16 +196,44 @@ function initEvents(side) {
     $(document).keydown(function(event) {
         switch (event.key) {
         case 'ArrowUp':
-            if (Playground[side].y <= 0) {
-                return;
-            }
-            Playground[side].y -= 5;
+            Playground[side].move(-5);
             break;
         case 'ArrowDown':
-            if (Playground[side].y >= 330) {
-                return;
-            }
-            Playground[side].y += 5;
+            Playground[side].move(5);
+            break;
+        case 'R':
+            WS.send('reset');
+            htmlLog('reset sent');
+            return;
+        case 'w':
+            Playground.ball.pos.y -= 1;
+            break;
+        case 'a':
+            Playground.ball.pos.x -= 1;
+            break;
+        case 's':
+            Playground.ball.pos.y += 1;
+            break;
+        case 'd':
+            Playground.ball.pos.x += 1;
+            break;
+        case 'W':
+            Playground.ball.pos.y -= 10;
+            break;
+        case 'A':
+            Playground.ball.pos.x -= 10;
+            break;
+        case 'S':
+            Playground.ball.pos.y += 10;
+            break;
+        case 'D':
+            Playground.ball.pos.x += 10;
+            break;
+        case '=':
+            Playground[side].rotate += 1;
+            break;
+        case '-':
+            Playground[side].rotate -= 1;
             break;
         default:
             return;

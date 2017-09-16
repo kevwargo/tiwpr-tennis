@@ -1,6 +1,7 @@
 #main-container {
     width: 100%;
     text-align: center;
+    position: absolute;
 }
 
 #shadow {
@@ -29,4 +30,9 @@
     height: 480px;
     background-color: #d8d8f0;
     border: 1px solid #7c7c7c;
+}
+
+.message {
+    margin: 3px;
+    border: 1px dotted blue;
 }
