@@ -27,6 +27,7 @@ class Game:
         right.side = 'right'
         self.left = left
         self.right = right
+        self.coordinator = left
         left.game = self
         right.game = self
         self.reset()
@@ -80,7 +81,7 @@ class Player(websocket.WebSocketHandler):
         self.manager = manager
         self.pos = 240
 
-    def send_json(self, type, data):
+    def send_json(self, type, data=None):
         self.write_message(json.dumps({'type': type, 'data': data}).encode('utf-8'))
 
     def send_pos(self):
@@ -136,7 +137,7 @@ class Player(websocket.WebSocketHandler):
             pass
 
     def on_close(self):
-        print('Player {} closed the connection'.format(self))
+        self.game.coordinator = self.opponent
         if self == self.manager.waitingPlayer:
             self.manager.waitingPlayer = None
 
@@ -155,16 +156,22 @@ class Player(websocket.WebSocketHandler):
         self.opponent.send_ball()
 
     def onBall(self, ball):
-        print('{} ball: {}'.format(self, ball))
-        self.game.ball = ball
-        self.send_ball()
-        self.opponent.send_ball()
+        if self.game.coordinator == self:
+            # print('{} ball: {}'.format(self, ball))
+            self.game.ball = ball
+            try:
+                self.opponent.send_ball()
+            except websocket.WebSocketClosedError:
+                pass
 
     def onScore(self, side):
         self.send_score(side)
-        self.opponent.send_score(side)
-        self.game.reset()
-
+        try:
+            self.opponent.send_score(side)
+        except websocket.WebSocketClosedError:
+            pass
+        self.manager.players.pop(self.session, None)
+        self.close()
 
 class Manager:
 

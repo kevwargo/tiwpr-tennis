@@ -61,10 +61,10 @@ var WS = {
 
     onBall: function(ball) {
         Playground.ball = ball;
-        htmlLog(JSON.stringify(ball));
     },
 
     onScore: function(result) {
+        htmlLog(JSON.stringify(Playground.ball));
         if (result) {
             $('#game-result').text('You won! :)').attr('class', 'won');
         } else {
@@ -72,6 +72,7 @@ var WS = {
         }
         $('#replay').css('display', 'table');
         Playground.stop();
+        window.sessionStorage.removeItem('session');
     }
 
 };
@@ -104,9 +105,9 @@ var Playground = {
             clearInterval(this.interval);
         }
         this.interval = setInterval(draw, this.refreshInterval);
-        // setInterval(function() {
-        //     WS.send('ball', self.ball);
-        // }, 1000);
+        setInterval(function() {
+            WS.send('ball', self.ball);
+        }, 1000);
     },
 
     drawBall: function() {
@@ -121,9 +122,17 @@ var Playground = {
         ball.pos.y += Math.sin(Math.PI * (ball.angle / 180)) * (ball.speed * this.refreshInterval / 1000);
 
         if (ball.pos.x <= this.ballSize) {
+            // ball.angle = (180 - ball.angle + 180 + 180) % 360;
+            // if (ball.angle < 0) {
+            //     ball.angle += 360;
+            // }
             WS.send('score', 'right');
             this.stop();
         } else if (ball.pos.x >= this.canvas.width - this.ballSize) {
+            // ball.angle = (0 - ball.angle + 0 + 180) % 360;
+            // if (ball.angle < 0) {
+            //     ball.angle += 360;
+            // }
             WS.send('score', 'left');
             this.stop();
         } else {
@@ -202,10 +211,10 @@ function findSession() {
     matches = location.search.match(/[?&]session=([A-Z0-9]+)(&|$)/);
     if (matches && matches[1]) {
         session = matches[1];
-        sessionStorage.session = session;
+        window.sessionStorage.session = session;
         console.log('Session id `' + session + '` extracted from URL query');
     } else {
-        session = sessionStorage.session;
+        session = window.sessionStorage.session;
         if (session) {
             console.log('Session id `' + session + '` extracted from sessionStorage');
         }
@@ -215,7 +224,7 @@ function findSession() {
 
 function initSession(session) {
     document.title = session;
-    sessionStorage.session = session;
+    window.sessionStorage.session = session;
     htmlLog('WS: Session saved: ' + session);
 }
 
