@@ -21,21 +21,27 @@ class SessionHandler(web.RequestHandler):
 
 class Game:
 
-    def __init__(self, left, right):
+    def __init__(self, left, right, manager):
+        self.manager = manager
         left.side = 'left'
         right.side = 'right'
         self.left = left
         self.right = right
         left.game = self
         right.game = self
-        self.ball = {
-            'pos': {'x': 320, 'y': 240},
-            'speed': 70.0, # pixels per second
-            'angle': left.manager.random_angle()
-        }
+        self.reset()
 
     def __str__(self):
         return 'Game {}:{}'.format(self.left, self.right)
+
+    def reset(self):
+        self.ball = {
+            'pos': {'x': 320, 'y': 240},
+            'speed': 70.0, # pixels per second
+            'angle': self.manager.random_angle()
+        }
+        self.left.pos = 240;
+        self.right.pos = 240;
 
     def update_player(self, player, session):
         if session == str(self.left):
@@ -102,6 +108,12 @@ class Player(websocket.WebSocketHandler):
     def send_ball(self):
         self.send_json('ball', self.game.ball)
 
+    def send_score(self, side):
+        if self.side == side:
+            self.send_json('score', True)
+        else:
+            self.send_json('score', False)
+
     def open(self, session=None, **kwargs):
         print('New ws connection: ' + str(session))
         if session and session.upper() in self.manager.players:
@@ -148,6 +160,11 @@ class Player(websocket.WebSocketHandler):
         self.send_ball()
         self.opponent.send_ball()
 
+    def onScore(self, side):
+        self.send_score(side)
+        self.opponent.send_score(side)
+        self.game.reset()
+
 
 class Manager:
 
@@ -174,7 +191,7 @@ class Manager:
             player.throw_error('Session is taken')
 
     def create_new_game(self, player):
-        game = Game(self.waitingPlayer, player)
+        game = Game(self.waitingPlayer, player, self)
         self.games.add(game)
         self.waitingPlayer.init_session()
         player.init_session()
@@ -190,7 +207,7 @@ class Manager:
         self.waitingPlayer = player
 
     def random_angle(self):
-        return self.rangen.randint(0, 50) + self.rangen.choice([20, 110, 200, 290])
+        return self.rangen.randint(10, 80) + self.rangen.choice([0, 90, 180, 270])
 
 
 def main(port):

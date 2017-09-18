@@ -62,12 +62,23 @@ var WS = {
     onBall: function(ball) {
         Playground.ball = ball;
         htmlLog(JSON.stringify(ball));
+    },
+
+    onScore: function(result) {
+        if (result) {
+            $('#game-result').text('You won! :)').attr('class', 'won');
+        } else {
+            $('#game-result').text('You lost... :(').attr('class', 'lost');
+        }
+        $('#replay').css('display', 'table');
+        Playground.stop();
     }
 
 };
 
 var Playground = {
     ballSize: 30,
+    refreshInterval: 40,
 
     init: function(game) {
         this.canvas = document.getElementById('playground');
@@ -81,37 +92,53 @@ var Playground = {
     },
 
     start: function() {
-        var refreshInterval = 40;
-        var counter = 0;
+        var self = this;
         var draw = function() {
-            var ctx = Playground.context,
-                left = Playground.left,
-                right = Playground.right,
-                ball = Playground.ball;
-
-            counter++;
-
-            Playground.clear();
-            left.draw(ctx);
-            right.draw(ctx);
-
-            ctx.beginPath();
-            ctx.arc(ball.pos.x, ball.pos.y, Playground.ballSize, 0, 2 * Math.PI);
-            ctx.fillStyle = 'green';
-            ctx.fill();
-
-            ball.pos.x += Math.cos(Math.PI * (ball.angle / 180)) * (ball.speed * refreshInterval / 1000);
-            ball.pos.y += Math.sin(Math.PI * (ball.angle / 180)) * (ball.speed * refreshInterval / 1000);
-
+            self.clear();
+            self.left.draw(self.context);
+            self.right.draw(self.context);
+            self.drawBall();
         };
         draw();
         if (this.interval) {
             clearInterval(this.interval);
         }
-        this.interval = setInterval(draw, refreshInterval);
-        setInterval(function() {
-            WS.send('ball', Playground.ball);
-        }, 1000);
+        this.interval = setInterval(draw, this.refreshInterval);
+        // setInterval(function() {
+        //     WS.send('ball', self.ball);
+        // }, 1000);
+    },
+
+    drawBall: function() {
+        var ball = this.ball;
+
+        this.context.beginPath();
+        this.context.arc(ball.pos.x, ball.pos.y, this.ballSize, 0, 2 * Math.PI);
+        this.context.fillStyle = 'green';
+        this.context.fill();
+
+        ball.pos.x += Math.cos(Math.PI * (ball.angle / 180)) * (ball.speed * this.refreshInterval / 1000);
+        ball.pos.y += Math.sin(Math.PI * (ball.angle / 180)) * (ball.speed * this.refreshInterval / 1000);
+
+        if (ball.pos.x <= this.ballSize) {
+            WS.send('score', 'right');
+            this.stop();
+        } else if (ball.pos.x >= this.canvas.width - this.ballSize) {
+            WS.send('score', 'left');
+            this.stop();
+        } else {
+            if (ball.pos.y <= this.ballSize) {
+                ball.angle = (270 - ball.angle + 270 + 180) % 360;
+                if (ball.angle < 0) {
+                    ball.angle += 360;
+                }
+            } else if (ball.pos.y >= this.canvas.height - this.ballSize) {
+                ball.angle = (90 - ball.angle + 90 + 180) % 360;
+                if (ball.angle < 0) {
+                    ball.angle += 360;
+                }
+            }
+        }
     },
 
     clear: function() {
@@ -205,41 +232,15 @@ function initEvents(side) {
             WS.send('reset');
             htmlLog('reset sent');
             return;
-        case 'w':
-            Playground.ball.pos.y -= 1;
-            break;
-        case 'a':
-            Playground.ball.pos.x -= 1;
-            break;
-        case 's':
-            Playground.ball.pos.y += 1;
-            break;
-        case 'd':
-            Playground.ball.pos.x += 1;
-            break;
-        case 'W':
-            Playground.ball.pos.y -= 10;
-            break;
-        case 'A':
-            Playground.ball.pos.x -= 10;
-            break;
-        case 'S':
-            Playground.ball.pos.y += 10;
-            break;
-        case 'D':
-            Playground.ball.pos.x += 10;
-            break;
-        case '=':
-            Playground[side].rotate += 1;
-            break;
-        case '-':
-            Playground[side].rotate -= 1;
-            break;
         default:
             return;
         }
         event.preventDefault();
         WS.send('pos', Playground[side].y);
+    });
+
+    $('#replay-button').click(function() {
+        window.location.reload(true);
     });
 }
 
