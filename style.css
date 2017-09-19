@@ -26,16 +26,20 @@
     font-size: 48px;
 }
 
+#game-result {
+    font-size: 56px;
+}
+
 #replay {
     display: none;
 }
 
 .won {
-    color: green;
+    color: #70ff80;
 }
 
 .lost {
-    color: red;
+    color: #ff8070;
 }
 
 #playground-container {
