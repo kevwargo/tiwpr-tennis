@@ -4,6 +4,7 @@ import sys
 import json
 import random
 import base64 as b64
+import math
 from tornado import web, websocket, ioloop
 
 
@@ -36,10 +37,12 @@ class Game:
         return 'Game {}:{}'.format(self.left, self.right)
 
     def reset(self):
+        angle = self.manager.random_angle()
+        speed = 70
         self.ball = {
+            'size': 20,
             'pos': {'x': 320, 'y': 240},
-            'speed': 70.0, # pixels per second
-            'angle': self.manager.random_angle()
+            'speed': {'x': speed * math.cos(angle), 'y': speed * math.sin(angle)}
         }
         self.left.pos = 240;
         self.right.pos = 240;
@@ -137,7 +140,8 @@ class Player(websocket.WebSocketHandler):
             pass
 
     def on_close(self):
-        self.game.coordinator = self.opponent
+        if hasattr(self, 'game'):
+            self.game.coordinator = self.opponent
         if self == self.manager.waitingPlayer:
             self.manager.waitingPlayer = None
 
@@ -147,11 +151,7 @@ class Player(websocket.WebSocketHandler):
         self.opponent.send_pos()
 
     def onReset(self, *args):
-        self.game.ball = {
-            'pos': {'x': 320, 'y': 240},
-            'speed': 70.0,
-            'angle': self.manager.random_angle()
-        }
+        self.game.reset()
         self.send_ball()
         self.opponent.send_ball()
 
@@ -214,7 +214,7 @@ class Manager:
         self.waitingPlayer = player
 
     def random_angle(self):
-        return self.rangen.randint(10, 80) + self.rangen.choice([0, 90, 180, 270])
+        return math.pi * (self.rangen.randint(10, 80) + self.rangen.choice([0, 90, 180, 270])) / 180
 
 
 def main(port):

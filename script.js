@@ -4,7 +4,7 @@ var WS = {
         this.ws = new WebSocket('ws://' + location.host + "/ws" + (session ? '/' + session : ''));
         this.ws.binaryType = 'arraybuffer';
         this.ws.onopen = function(event) {
-            htmlLog('WS opened');
+            // htmlLog('WS opened');
         };
         this.ws.onmessage = function(event) {
             if (typeof event.data === 'string') {
@@ -30,7 +30,7 @@ var WS = {
     },
 
     onError: function(err) {
-        htmlLog(renderjson.set_show_to_level('all')(err));
+        // htmlLog(renderjson.set_show_to_level('all')(err));
     },
 
     handleBinary: function(data) {
@@ -39,7 +39,7 @@ var WS = {
         for (var i = 0; i < data.byteLength; i++) {
             bytes.push([dataView.getInt8(i), dataView.getUint8(i)]);
         }
-        htmlLog(JSON.stringify(bytes));
+        // htmlLog(JSON.stringify(bytes));
     },
 
     onSession: function(session) {
@@ -47,11 +47,10 @@ var WS = {
     },
 
     onGame: function(game) {
-        htmlLog('WS: Game: ' + game.id);
+        // htmlLog('WS: ' + game.id);
         $('#shadow').hide();
         Playground.init(game);
         Playground.start();
-        htmlLog('Angle: ' + game.ball.angle);
     },
 
     onPos: function(pos) {
@@ -64,7 +63,7 @@ var WS = {
     },
 
     onScore: function(result) {
-        htmlLog(JSON.stringify(Playground.ball));
+        // htmlLog(JSON.stringify(Playground.ball));
         if (result) {
             $('#game-result').text('You won! :)').attr('class', 'won');
         } else {
@@ -78,7 +77,6 @@ var WS = {
 };
 
 var Playground = {
-    ballSize: 30,
     refreshInterval: 40,
 
     init: function(game) {
@@ -114,37 +112,46 @@ var Playground = {
         var ball = this.ball;
 
         this.context.beginPath();
-        this.context.arc(ball.pos.x, ball.pos.y, this.ballSize, 0, 2 * Math.PI);
+        this.context.arc(ball.pos.x, ball.pos.y, ball.size, 0, 2 * Math.PI);
         this.context.fillStyle = 'green';
         this.context.fill();
 
-        ball.pos.x += Math.cos(Math.PI * (ball.angle / 180)) * (ball.speed * this.refreshInterval / 1000);
-        ball.pos.y += Math.sin(Math.PI * (ball.angle / 180)) * (ball.speed * this.refreshInterval / 1000);
+        ball.pos.x += ball.speed.x * this.refreshInterval / 1000;
+        ball.pos.y += ball.speed.y * this.refreshInterval / 1000;
 
-        if (ball.pos.x <= this.ballSize) {
-            // ball.angle = (180 - ball.angle + 180 + 180) % 360;
-            // if (ball.angle < 0) {
-            //     ball.angle += 360;
-            // }
+        if (ball.pos.x <= ball.size) {
             WS.send('score', 'right');
             this.stop();
-        } else if (ball.pos.x >= this.canvas.width - this.ballSize) {
-            // ball.angle = (0 - ball.angle + 0 + 180) % 360;
-            // if (ball.angle < 0) {
-            //     ball.angle += 360;
-            // }
+        } else if (ball.pos.x >= this.canvas.width - ball.size) {
             WS.send('score', 'left');
             this.stop();
         } else {
-            if (ball.pos.y <= this.ballSize) {
-                ball.angle = (270 - ball.angle + 270 + 180) % 360;
-                if (ball.angle < 0) {
-                    ball.angle += 360;
-                }
-            } else if (ball.pos.y >= this.canvas.height - this.ballSize) {
-                ball.angle = (90 - ball.angle + 90 + 180) % 360;
-                if (ball.angle < 0) {
-                    ball.angle += 360;
+            if (ball.pos.y <= ball.size && this.bounce !== 'top') {
+                ball.speed.y = -ball.speed.y;
+                this.bounce = 'top';
+            } else if (ball.pos.y >= this.canvas.height - ball.size && this.bounce !== 'bottom') {
+                ball.speed.y = -ball.speed.y;
+                this.bounce = 'bottom';
+            } else {
+                for (var p in {left: 0, right: 1}) {
+                    var collision = this[p].collides(ball);
+                    if (typeof collision === 'object') {
+                        var dx = ball.speed.x,
+                            dy = ball.speed.y,
+                            dist = this.dist(collision[0], collision[1], ball.pos.x, ball.pos.y),
+                            nx = (ball.pos.x - collision[0]) / dist,
+                            ny = (ball.pos.y - collision[1]) / dist,
+                            product = nx*dx + ny*dy;
+
+                        htmlLog("Old: " + JSON.stringify(ball.speed));
+                        ball.speed.x = dx - 2*product*nx;
+                        ball.speed.y = dy - 2*product*ny;
+                        htmlLog("New: " + JSON.stringify(ball.speed));
+                        this.bounce = null;
+                    } else if (typeof collision === 'number') {
+                        ball.speed.x = -ball.speed.x;
+                        this.bounce = null;
+                    }
                 }
             }
         }
@@ -159,6 +166,11 @@ var Playground = {
             clearInterval(this.interval);
             this.interval = undefined;
         }
+    },
+
+    dist: function(x1, y1, x2, y2) {
+        var sqr = function(x) { return x*x; };
+        return Math.sqrt(sqr(x1-x2) + sqr(y1-y2));
     }
 };
 
@@ -198,6 +210,25 @@ function Player(side) {
 
         ctx.setTransform(1, 0, 0, 1, 0, 0);
     };
+
+    this.collides = function(ball) {
+        var upCenterY = this.y - this.height/2 + this.width;
+        var downCenterY = this.y + this.height/2 - this.width;
+        var coords = [
+            [-this.xTranslate, upCenterY],
+            [-this.xTranslate, downCenterY]
+        ];
+        for (var i in coords) {
+            if (Playground.dist(coords[i][0], coords[i][1], ball.pos.x, ball.pos.y) < ball.size + this.width) {
+                htmlLog(JSON.stringify(coords[i]));
+                return coords[i];
+            }
+        }
+        if (this.xScale * ball.pos.x < this.xTranslate + this.width + ball.size
+            && ball.pos.y <= downCenterY && ball.pos.y >= upCenterY) {
+            return Math.abs(this.xTranslate + this.width + ball.size);
+        }
+    }
 }
 
 
@@ -225,7 +256,7 @@ function findSession() {
 function initSession(session) {
     document.title = session;
     window.sessionStorage.session = session;
-    htmlLog('WS: Session saved: ' + session);
+    // htmlLog('WS: Session saved: ' + session);
 }
 
 function initEvents(side) {
@@ -239,7 +270,7 @@ function initEvents(side) {
             break;
         case 'R':
             WS.send('reset');
-            htmlLog('reset sent');
+            // htmlLog('reset sent');
             return;
         default:
             return;
@@ -251,6 +282,10 @@ function initEvents(side) {
     $('#replay-button').click(function() {
         window.location.reload(true);
     });
+
+    window.setInterval(function() {
+        $('#ball-pos').text(JSON.stringify(Playground.ball.pos));
+    }, 1500);
 }
 
 
