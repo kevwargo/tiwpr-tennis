@@ -99,11 +99,14 @@ var Playground = {
             self.drawBall();
         };
         draw();
-        if (this.interval) {
-            clearInterval(this.interval);
+        if (this.drawInterval) {
+            clearInterval(this.drawInterval);
         }
-        this.interval = setInterval(draw, this.refreshInterval);
-        setInterval(function() {
+        if (this.sendBallInterval) {
+            clearInterval(this.sendBallInterval);
+        }
+        this.drawInterval = setInterval(draw, this.refreshInterval);
+        this.sendBallInterval = setInterval(function() {
             WS.send('ball', self.ball);
         }, 1000);
     },
@@ -162,9 +165,13 @@ var Playground = {
     },
 
     stop: function() {
-        if (this.interval) {
-            clearInterval(this.interval);
-            this.interval = undefined;
+        if (this.drawInterval) {
+            clearInterval(this.drawInterval);
+            this.drawInterval = undefined;
+        }
+        if (this.sendBallInterval) {
+            clearInterval(this.sendBallInterval);
+            this.sendBallInterval = undefined;
         }
     },
 
@@ -191,6 +198,9 @@ function Player(side) {
 
     this.move = function(step) {
         this.y += step;
+        if (this.y <= 0 || this.y >= Playground.canvas.height) {
+            this.y -= step;
+        }
     };
 
     this.draw = function(ctx) {

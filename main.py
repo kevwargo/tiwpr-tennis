@@ -38,7 +38,7 @@ class Game:
 
     def reset(self):
         angle = self.manager.random_angle()
-        speed = 70
+        speed = 30
         self.ball = {
             'size': 20,
             'pos': {'x': 320, 'y': 240},
@@ -142,22 +142,29 @@ class Player(websocket.WebSocketHandler):
     def on_close(self):
         if hasattr(self, 'game'):
             self.game.coordinator = self.opponent
+        if hasattr(self, 'session'):
+            print('Player {} disconnected'.format(self.session))
         if self == self.manager.waitingPlayer:
             self.manager.waitingPlayer = None
 
     def onPos(self, pos):
         self.pos = pos
         self.send_pos()
-        self.opponent.send_pos()
+        try:
+            self.opponent.send_pos()
+        except websocket.WebSocketClosedError:
+            pass
 
     def onReset(self, *args):
         self.game.reset()
         self.send_ball()
-        self.opponent.send_ball()
+        try:
+            self.opponent.send_ball()
+        except websocket.WebSocketClosedError:
+            pass
 
     def onBall(self, ball):
         if self.game.coordinator == self:
-            # print('{} ball: {}'.format(self, ball))
             self.game.ball = ball
             try:
                 self.opponent.send_ball()
